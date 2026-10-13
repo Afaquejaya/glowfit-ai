@@ -132,7 +132,25 @@ export function StepLooks() {
           return (
             <article
               key={l.id}
-              className={clsx("card flex flex-col overflow-hidden p-0", isRec && "ring-2 ring-rose-400 lg:-translate-y-1")}
+              role="button"
+              tabIndex={rendered ? 0 : -1}
+              aria-disabled={!rendered}
+              aria-label={`Choose ${l.name}`}
+              title={rendered ? `Choose ${l.name}` : "Generate the looks first"}
+              onClick={() => rendered && choose(l.id)}
+              onKeyDown={(e) => {
+                if (rendered && e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  choose(l.id);
+                }
+              }}
+              className={clsx(
+                "card group flex flex-col overflow-hidden p-0 outline-none transition duration-200",
+                isRec && "ring-2 ring-rose-400 lg:-translate-y-1",
+                rendered
+                  ? "cursor-pointer hover:-translate-y-1.5 hover:shadow-card hover:ring-2 hover:ring-wine-700/60 focus-visible:ring-2 focus-visible:ring-wine-700"
+                  : "cursor-not-allowed",
+              )}
             >
               <LookImage imageKey={lookImages[l.id]} alt={l.name} loading={busy[l.id]} className="m-1.5 h-72 rounded-[22px]">
                 <span className="absolute left-4 top-4 text-sm tracking-[0.2em] text-white drop-shadow">LOOK {l.index}</span>
@@ -176,7 +194,13 @@ export function StepLooks() {
                       ))}
                     </ul>
                     {s.reasons.length > 2 && (
-                      <button onClick={() => setOpen(open === l.id ? null : l.id)} className="mt-1 text-xs text-rose-600 underline">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpen(open === l.id ? null : l.id);
+                        }}
+                        className="mt-1 text-xs text-rose-600 underline"
+                      >
                         {open === l.id ? "Show less" : `+${s.reasons.length - 2} more reasons`}
                       </button>
                     )}
@@ -185,13 +209,22 @@ export function StepLooks() {
                 <div className="mt-auto grid grid-cols-2 gap-3 pt-4">
                   <button
                     className={clsx(isRec ? "btn-primary" : "btn-outline", "px-3 py-2.5 text-base")}
-                    onClick={() => choose(l.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      choose(l.id);
+                    }}
                     disabled={!rendered}
-                    title={rendered ? undefined : "Generate the looks first"}
+                    tabIndex={-1}
                   >
                     Choose Look
                   </button>
-                  <button className="btn-outline px-3 py-2.5 text-base" onClick={() => setCompare(true)}>
+                  <button
+                    className="btn-outline px-3 py-2.5 text-base"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCompare(true);
+                    }}
+                  >
                     <BarChart3 className="h-4 w-4" /> Compare
                   </button>
                 </div>

@@ -24,7 +24,34 @@ export type SkinResult = {
   skinType?: string;
   metrics: SkinMetric[];
   analyzedAt: string;
+  /** Face structure from YouCam AI Face Analyzer (face-attr-analysis), when it ran. */
+  face?: FaceAttrs | null;
 };
+
+export type FaceAttrs = {
+  faceShape: string;
+  eyeShape?: string;
+  lipShape?: string;
+  eyebrowShape?: string;
+  cheekbones?: string;
+  demo?: boolean;
+};
+
+// Face Analyzer shape labels mapped onto the five shapes the hairstyle matcher knows.
+export const FACE_SHAPE_MAP: Record<string, "oval" | "round" | "square" | "heart" | "long" | undefined> = {
+  oval: "oval",
+  round: "round",
+  square: "square",
+  heart: "heart",
+  oblong: "long",
+  diamond: "oval",
+  triangle: "square",
+  invtriangle: "heart",
+};
+
+export function faceShapeLabel(raw: string) {
+  return raw === "InvTriangle" ? "Inverted Triangle" : raw;
+}
 
 export const METRIC_LABELS: Record<SkinMetricKey, string> = {
   moisture: "Hydration",
@@ -56,7 +83,7 @@ export function overallScore(metrics: SkinMetric[]) {
 export const YOUCAM_ERROR_HINTS: Record<string, string> = {
   error_below_min_image_size: "The photo is too small. Use a sharper, larger photo.",
   error_exceed_max_image_size: "The photo is too large. Try a smaller one.",
-  error_src_face_too_small: "Your face is too small in the photo. Move closer so it fills the frame.",
+  error_src_face_too_small: "Your face is too small in the photo. Tap Adjust Photo, then Fit Face, so your face fills the oval.",
   error_src_face_out_of_bound: "Part of your face is outside the frame. Center your face and try again.",
   error_lighting_dark: "The lighting is too dark. Face a window or a soft light.",
   error_no_face: "We couldn't find a face. Use a clear, front-facing selfie.",

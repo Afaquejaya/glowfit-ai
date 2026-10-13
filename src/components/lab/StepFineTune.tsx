@@ -2,14 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { ArrowRight, Brush, Check, ChevronRight, Crown, Droplet, Eye, Info, Palette, RotateCcw, Scissors, Sparkle, Sparkles, Wand2 } from "lucide-react";
+import { ArrowRight, Brush, Check, Crown, Droplet, Eye, Info, Palette, RotateCcw, Scissors, Sparkle, Sparkles, Wand2 } from "lucide-react";
 import { useGlowStore } from "@/store/glowfit";
-import { CHANGE_KINDS, CHANGE_OPTIONS, currentOption, exampleImage, getBaseLook, labProducts, totalPrice, type ChangeKind, type Recipe } from "@/lib/looks";
+import { CHANGE_KINDS, CHANGE_OPTIONS, exampleImage, getBaseLook, labProducts, totalPrice, type ChangeKind, type Recipe } from "@/lib/looks";
 import { impactOf, labelOccasion, OCCASIONS, type Occasion } from "@/lib/scoring";
 import { CATEGORIES, FACE_SHAPES, inCategory, matchHair, type FaceShape, type HairCategory } from "@/lib/hairMatch";
 import { money } from "@/lib/catalog";
 import { useMakeupRender } from "@/lib/useMakeupRender";
 import { HairRenderLoader } from "./HairRenderLoader";
+import { useFaceVariants, VARIANT_KINDS } from "@/lib/faceVariants";
 import { stylesFor, useHairRender, useHairstyles, type HairStyle } from "@/lib/useHairRender";
 import { CompareSlider, LabHeader, LookImage, RenderCounter, useResolvedImage } from "./shared";
 
@@ -45,7 +46,8 @@ function why(kind: ChangeKind, label: string, d: { harmony: number; occasion: nu
   return parts.length ? `${what} ${parts.join(", ")}.` : `${what} keeps the overall balance of your look.`;
 }
 
-// Step 4: change ONE thing. Impact is calculated instantly for free; a render (1 unit) runs only on "Preview".
+// Step 4: change one thing at a time. Picking an option renders it on the user's photo and applies it right away;
+// Undo steps back. Renders are cached, so re-picking an option costs nothing.
 export function StepFineTune() {
   const lab = useGlowStore((s) => s.lab);
   const skin = useGlowStore((s) => s.skin);
@@ -58,19 +60,20 @@ export function StepFineTune() {
   const [hairPick, setHairPick] = useState<HairStyle | null>(null);
   const [hairDemo, setHairDemo] = useState(false);
   const [optionId, setOptionId] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ recipe: Recipe; key: string; label: string } | null>(null);
   // The last change the user applied, so the slider can keep comparing it after Apply.
   const [applied, setApplied] = useState<{ before: string | null; label: string } | null>(null);
+  // Impact of the last applied makeup change, so the AI Impact panel still explains it after it is applied.
+  const [lastImpact, setLastImpact] = useState<{ kind: ChangeKind; label: string; impact: ReturnType<typeof impactOf>; cost: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Picking a hairstyle renders it on the user's own photo right away.
-  const [autoHair, setAutoHair] = useState(false);
+  // Picking an option or a hairstyle renders it on the user's own photo right away.
+  const [autoRun, setAutoRun] = useState(false);
   const runRef = useRef<() => void>(() => {});
   useEffect(() => {
-    if (!autoHair || busy) return;
-    setAutoHair(false);
+    if (!autoRun || busy) return;
+    setAutoRun(false);
     runRef.current();
-  }, [autoHair, busy, hairPick]);
+  }, [autoRun, busy, hairPick, optionId]);
 
   // Glow Assistant can send the user here with a change already picked.
   useEffect(() => {
@@ -84,6 +87,7 @@ export function StepFineTune() {
         setHairMode(false);
         setKind(t.kind as ChangeKind);
         setOptionId(t.optionId ?? null);
+        if (t.optionId) setAutoRun(true);
       }
     } catch {
       /* no preset */
@@ -91,33 +95,36 @@ export function StepFineTune() {
   }, []);
 
   const beforeSrc = useResolvedImage(lab.currentImage);
-  const afterSrc = useResolvedImage(preview?.key);
   const appliedBeforeSrc = useResolvedImage(applied?.before);
 
+  // Lip, eye and blush options are previewed on the user's own photo (on-device, no units).
+  const variants = useFaceVariants(hairMode ? null : beforeSrc, kind, lab.currentRecipe);
   const look = lab.chosenLook ? getBaseLook(lab.chosenLook) : null;
   const current = lab.currentRecipe;
+  // Every change builds on the applied look, so lip, eyes and hair stack.
+  const working = current;
+  const workingImage = lab.currentImage;
   const option = CHANGE_OPTIONS[kind].options.find((o) => o.id === optionId) ?? null;
-  const nowOption = current ? currentOption(kind, current) : null;
   const candidate = useMemo(() => {
-    if (!current) return null;
+    if (!working) return null;
     if (hairMode) {
       if (!hairPick) return null;
-      return hairPick.id === ORIGINAL_HAIR.id ? stripHair(current) : { ...stripHair(current), hair: { id: hairPick.id, title: hairPick.title } };
+      return hairPick.id === ORIGINAL_HAIR.id ? stripHair(working) : { ...stripHair(working), hair: { id: hairPick.id, title: hairPick.title } };
     }
-    return option ? option.apply(current) : null;
-  }, [current, option, hairMode, hairPick]);
-  if (!look || !current) return null;
+    return option ? option.apply(working) : null;
+  }, [working, option, hairMode, hairPick]);
+  if (!look || !current || !working) return null;
 
   const price = (r: Recipe) => totalPrice(labProducts(look, r, lab.priceMode, lab.picks));
-  const impact = candidate && !hairMode ? impactOf(look.id, current, candidate, lab.moment, skin) : null;
-  const costDelta = candidate ? price(candidate) - price(current) : 0;
-  const previewMatches = !!preview && !!candidate && JSON.stringify(preview.recipe) === JSON.stringify(candidate);
+  const shown = !hairMode && !candidate && lastImpact?.kind === kind ? lastImpact : null;
+  const impact = candidate && !hairMode ? impactOf(look.id, working, candidate, lab.moment, skin) : (shown?.impact ?? null);
+  const costDelta = candidate ? price(candidate) - price(working) : 0;
   const pickLabel = hairMode ? hairPick?.title : option?.label;
   const styleFor = (h: { id: string; title: string }): HairStyle =>
     hair.styles.find((s) => s.id === h.id) ?? { ...h, thumb: null, gender: "any" };
   const sub = `${labelOccasion(lab.moment.occasion)} · ${cap(lab.moment.time)}`;
 
-  const runPreview = async () => {
+  const runChange = async () => {
     if (!candidate || (!option && !hairMode)) return;
     setBusy(true);
     setError(null);
@@ -127,15 +134,23 @@ export function StepFineTune() {
       // Makeup is always rendered on the selfie first (cached, so repeats are free), then the hairstyle on top.
       // With no hairstyle yet, the current image already is the makeup-only render, so reuse it.
       const makeupKey =
-        hairMode && !current.hair && lab.currentImage ? lab.currentImage : (await render(stripHair(candidate), demoKey)).key;
+        hairMode && !working.hair && workingImage ? workingImage : (await render(stripHair(candidate), demoKey)).key;
       let key = makeupKey;
       if (candidate.hair) {
         const done = await hairRender(makeupKey, styleFor(candidate.hair));
         key = done.key;
         setHairDemo(done.demo);
       }
-      setPreview({ recipe: candidate, key, label: pickLabel ?? "new" });
-      setApplied(null);
+      if (!hairMode && option) setLastImpact({ kind, label: option.label, impact: impactOf(look.id, current, candidate, lab.moment, skin), cost: price(candidate) - price(current) });
+      // Applied straight away: the previous look goes on the undo stack.
+      updateLab({
+        history: [...lab.history, { recipe: current, image: lab.currentImage }],
+        currentRecipe: candidate,
+        currentImage: key,
+      });
+      setApplied({ before: lab.currentImage, label: hairMode ? (pickLabel ?? "New hairstyle") : `${pickLabel ?? "New"} ${CHANGE_OPTIONS[kind].label}` });
+      setOptionId(null);
+      setHairPick(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -144,36 +159,26 @@ export function StepFineTune() {
   };
 
   runRef.current = () => {
-    if (!previewMatches) void runPreview();
+    void runChange();
   };
   const pickHair = (s: HairStyle) => {
     setHairPick(s);
-    setAutoHair(true);
+    setAutoRun(true);
   };
-
-  const apply = () => {
-    if (!preview) return;
-    updateLab({
-      history: [...lab.history, { recipe: current, image: lab.currentImage }],
-      currentRecipe: preview.recipe,
-      currentImage: preview.key,
-    });
-    setApplied({ before: lab.currentImage, label: preview.label });
-    setPreview(null);
-    setOptionId(null);
-    setHairPick(null);
+  const pickOption = (id: string) => {
+    setOptionId(id);
+    setAutoRun(true);
   };
 
   const undo = () => {
-    setApplied(null);
-    if (preview) {
-      setPreview(null);
-      setOptionId(null);
-      setHairPick(null);
-      return;
-    }
+    setOptionId(null);
+    setHairPick(null);
     const last = lab.history[lab.history.length - 1];
-    if (last) updateLab({ currentRecipe: last.recipe, currentImage: last.image, history: lab.history.slice(0, -1) });
+    if (!last) return setApplied(null);
+    const prev = lab.history[lab.history.length - 2];
+    updateLab({ currentRecipe: last.recipe, currentImage: last.image, history: lab.history.slice(0, -1) });
+    // Keep the slider on the step before, so Undo still shows a before/after.
+    setApplied(prev ? { before: prev.image, label: "previous change" } : null);
   };
 
   return (
@@ -187,15 +192,15 @@ export function StepFineTune() {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_380px_minmax(0,1fr)]">
         <article className="card h-fit overflow-hidden p-0">
-          <LookImage imageKey={lab.currentImage} alt="Current look" className="m-1.5 h-72 rounded-[22px] sm:h-96">
-            <span className="absolute left-4 top-4 rounded-full bg-white/90 px-4 py-1.5 text-xs tracking-[0.18em] text-wine-700">CURRENT LOOK</span>
+          <LookImage imageKey={lab.history[0]?.image ?? lab.currentImage} alt="Starting look" className="m-1.5 h-72 rounded-[22px] sm:h-96">
+            <span className="absolute left-4 top-4 rounded-full bg-white/90 px-4 py-1.5 text-xs tracking-[0.18em] text-wine-700">STARTING LOOK</span>
           </LookImage>
           <div className="flex items-end justify-between px-5 pb-5 pt-2">
             <div>
               <p className="font-serif text-3xl text-wine-700">{look.name}</p>
               <p className="text-charcoal/60">{sub}</p>
             </div>
-            <p className="font-serif text-3xl text-wine-700">{money(price(current))}</p>
+            <p className="font-serif text-3xl text-wine-700">{money(price(lab.history[0]?.recipe ?? current))}</p>
           </div>
         </article>
 
@@ -250,16 +255,23 @@ export function StepFineTune() {
           ) : (
           <>
 
-          <p className="mb-2 mt-5 font-serif text-wine-700">Choose a new {CHANGE_OPTIONS[kind].label.toLowerCase()}</p>
+          <div className="mb-2 mt-5 flex items-center justify-between gap-2">
+            <p className="font-serif text-wine-700">Choose a new {CHANGE_OPTIONS[kind].label.toLowerCase()}</p>
+            {VARIANT_KINDS.includes(kind) && variants !== null && (
+              <span className={clsx("rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide", variants ? "bg-sage/15 text-sage" : "bg-blush-100 text-charcoal/50")}>
+                {variants ? "On your photo" : "Reading your face…"}
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:grid-cols-3">
             {CHANGE_OPTIONS[kind].options.map((o) => {
-              const same = JSON.stringify(o.apply(current)) === JSON.stringify(current);
+              const same = JSON.stringify(o.apply(working)) === JSON.stringify(working);
               const active = o.id === optionId;
               return (
                 <button
                   key={o.id}
-                  disabled={same}
-                  onClick={() => setOptionId(o.id)}
+                  onClick={() => pickOption(o.id)}
+                  disabled={same || busy}
                   className={clsx(
                     "relative flex flex-col items-center gap-1.5 overflow-hidden rounded-2xl border p-1 pb-2 text-xs transition",
                     active ? "border-rose-400 bg-blush-100 ring-2 ring-rose-400/30" : "border-blush-200 bg-white/70 hover:bg-blush-50",
@@ -268,7 +280,12 @@ export function StepFineTune() {
                   title={same ? "This is your current choice" : `See ${o.label}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={exampleImage(kind, o.id)} alt={`${o.label} example`} className={clsx("aspect-[4/3] w-full rounded-xl object-cover", kind === "brows" && "object-top")} loading="lazy" />
+                  <img
+                    src={variants?.[o.id] ?? exampleImage(kind, o.id)}
+                    alt={variants?.[o.id] ? `${o.label} on your photo` : `${o.label} example`}
+                    className={clsx("aspect-[4/3] w-full rounded-xl object-cover", kind === "brows" && "object-top")}
+                    loading="lazy"
+                  />
                   {same && (
                     <span className="absolute left-2 top-2 rounded-full bg-white/90 px-1.5 text-[9px] uppercase tracking-wide text-charcoal/60">Current</span>
                   )}
@@ -297,7 +314,7 @@ export function StepFineTune() {
                   ["Face Harmony", impact ? signed(impact.harmony) : "–"],
                   ["Occasion Fit", impact ? signed(impact.occasion) : "–"],
                   ["Contrast", impact ? signed(impact.contrast) : "–"],
-                  ["Est. Cost", candidate ? `${costDelta >= 0 ? "+" : "-"}${money(Math.abs(costDelta))}` : "–"],
+                  ["Est. Cost", candidate || shown ? `${(candidate ? costDelta : shown!.cost) >= 0 ? "+" : "-"}${money(Math.abs(candidate ? costDelta : shown!.cost))}` : "–"],
                 ] as const
               ).map(([label, v]) => (
                 <div key={label} className="rounded-xl bg-white/80 px-1 py-2">
@@ -315,69 +332,78 @@ export function StepFineTune() {
             </div>
             <p className="mt-3 text-sm text-charcoal/70">
               <span className="text-wine-700">Why? </span>
-              {impact && option ? why(kind, option.label, impact) : "Pick a swatch to see the impact before you spend a render."}
+              {impact && (option || shown) ? why(kind, option?.label ?? shown!.label, impact) : "Tap an option to apply it and see its impact."}
             </p>
           </div>
           )}
 
           {error && <p className="mt-3 rounded-xl bg-rose-50 p-2 text-sm text-rose-700">{error}</p>}
-          <button
-            className="btn-primary mt-4 w-full text-base"
-            onClick={runPreview}
-            disabled={!candidate || busy || previewMatches || (hairMode && hair.styles.length === 0)}
-          >
-            <Wand2 className="h-5 w-5" /> {busy ? "Rendering…" : previewMatches ? "Preview ready" : hairMode ? "Try This Hairstyle" : "Preview on My Face"}
-          </button>
-          <p className="mt-2 text-center text-[11px] text-charcoal/50">
-            {hairMode || current.hair
-              ? hairMode
-                ? "Each hairstyle you pick is applied to your photo (2 render units, free if tried before)"
-                : "Hairstyle try-on uses 2 render units (free if you tried it before)"
-              : "Uses 1 try-on render (free if you previewed it before)"}
+          {error && candidate && !busy && (
+            <button className="btn-primary mt-3 w-full text-base" onClick={() => void runChange()}>
+              <Wand2 className="h-5 w-5" /> Try Again
+            </button>
+          )}
+          <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-[11px] text-charcoal/50">
+            <Wand2 className="h-3.5 w-3.5" />
+            {busy
+              ? "Applying to your photo…"
+              : hairMode || current.hair
+                ? "Tap a style to apply it to your photo instantly (2 render units, free if tried before)"
+                : "Tap an option to apply it to your photo instantly (1 render unit, free if tried before)"}
           </p>
         </div>
 
         <article className="card h-fit overflow-hidden p-0">
-          <LookImage
-            imageKey={preview?.key ?? lab.currentImage}
-            alt="Updated look"
-            loading={busy}
-            loader={hairMode && hairPick ? <HairRenderLoader styleName={hairPick.title} /> : undefined}
-            className="m-1.5 h-72 rounded-[22px] sm:h-96">
-            <span className="absolute left-4 top-4 rounded-full bg-blush-100/95 px-4 py-1.5 text-xs tracking-[0.18em] text-wine-700">UPDATED LOOK</span>
-            <span className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-white/90 px-3 py-1.5 text-xs text-wine-700">
-              <Crown className="h-3.5 w-3.5" /> AI PREVIEW
-            </span>
-            {!preview && !busy && (
-              <span className="absolute inset-x-6 bottom-6 rounded-2xl bg-white/85 p-3 text-center text-sm text-charcoal/70 backdrop-blur">
-                {hairMode ? (
-                  <>
-                    Pick a hairstyle to see it on your own photo.
-                  </>
-                ) : (
-                  <>
-                    Pick a change, then click <b>Preview on My Face</b>.
-                  </>
+          <div className="relative m-1.5">
+            {!busy && applied && appliedBeforeSrc && beforeSrc ? (
+              <CompareSlider before={appliedBeforeSrc} after={beforeSrc} labels={["Before", "After"]} natural focus="object-center" />
+            ) : (
+              <LookImage
+                imageKey={workingImage}
+                alt="Updated look"
+                loading={busy}
+                loader={hairMode && hairPick ? <HairRenderLoader styleName={hairPick.title} /> : undefined}
+                className="h-72 rounded-[22px] sm:h-96"
+              >
+                {!busy && (
+                  <span className="absolute inset-x-6 bottom-6 rounded-2xl bg-white/85 p-3 text-center text-sm text-charcoal/70 backdrop-blur">
+                    {error ? (
+                      "That change could not be applied. Please try again."
+                    ) : hairMode ? (
+                      "Pick a hairstyle to see it on your own photo."
+                    ) : (
+                      "Tap an option to apply it to your photo."
+                    )}
+                  </span>
                 )}
-              </span>
+              </LookImage>
             )}
-            {preview && hairDemo && !busy && (
-              <span className="absolute inset-x-6 bottom-6 rounded-2xl bg-white/90 p-3 text-center text-xs text-charcoal/70 backdrop-blur">
+            <span className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-blush-100/95 px-4 py-1.5 text-xs tracking-[0.18em] text-wine-700">
+              {busy ? "RENDERING" : applied ? "BEFORE / AFTER" : "UPDATED LOOK"}
+            </span>
+            {applied && hairDemo && !busy && (
+              <span className="pointer-events-none absolute inset-x-6 bottom-12 z-10 rounded-2xl bg-white/90 p-3 text-center text-xs text-charcoal/70 backdrop-blur">
                 Sample mode: hairstyles are drawn on your face only with a YouCam API key.
               </span>
             )}
-          </LookImage>
+          </div>
+          {applied && !busy && (
+            <p className="flex items-center justify-center gap-1.5 px-5 pt-1 text-center text-xs text-charcoal/60">
+              <Crown className="h-3.5 w-3.5 text-wine-700" />
+              {`Applied: ${applied!.label}. Drag to compare.`}
+            </p>
+          )}
           <div className="flex items-end justify-between px-5 pb-5 pt-2">
             <div>
               <p className="font-serif text-3xl text-wine-700">{look.name}</p>
               <p className="text-charcoal/60">{sub}</p>
             </div>
             <div className="text-right">
-              <p className="font-serif text-3xl text-wine-700">{money(price(preview?.recipe ?? candidate ?? current))}</p>
-              {candidate && costDelta !== 0 && (
+              <p className="font-serif text-3xl text-wine-700">{money(price(current))}</p>
+              {lab.history.length > 0 && price(current) !== price(lab.history[0].recipe) && (
                 <p className="text-sm text-charcoal/55">
-                  ({costDelta > 0 ? "+" : "-"}
-                  {money(Math.abs(costDelta))})
+                  ({price(current) > price(lab.history[0].recipe) ? "+" : "-"}
+                  {money(Math.abs(price(current) - price(lab.history[0].recipe)))})
                 </p>
               )}
             </div>
@@ -385,85 +411,35 @@ export function StepFineTune() {
         </article>
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1.4fr_1fr]">
-        <section className="card p-4">
-          <p className="mb-2 font-serif text-lg">
-            Before vs After {hairMode ? (hairPick ? "· Hairstyle Change" : "") : option ? `· ${CHANGE_OPTIONS[kind].label} Change` : ""}
-          </p>
-          {hairMode && hairPick && !previewMatches && beforeSrc ? (
-            <div className="relative mx-auto overflow-hidden rounded-2xl bg-blush-50" style={{ width: "min(100%, calc(72vh * 0.75))" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={beforeSrc} alt="Your current look" className="w-full object-contain" />
-              {busy ? (
-                <HairRenderLoader styleName={hairPick.title} />
-              ) : (
-                <span className="absolute inset-x-4 bottom-4 rounded-2xl bg-white/90 p-3 text-center text-sm text-charcoal/70 backdrop-blur">
-                  {error
-                    ? "This hairstyle could not be applied. Click Try This Hairstyle to retry."
-                    : `Click Try This Hairstyle to apply ${hairPick.title} to your photo.`}
-                </span>
-              )}
-            </div>
-          ) : beforeSrc && afterSrc && preview ? (
-            <CompareSlider before={beforeSrc} after={afterSrc} labels={["Before", `After (${preview.label})`]} natural focus="object-center" />
-          ) : applied && appliedBeforeSrc && beforeSrc && !hairPick && !option ? (
-            <>
-              <CompareSlider before={appliedBeforeSrc} after={beforeSrc} labels={["Before", `After (${applied.label})`]} natural focus="object-center" />
-              <p className="mt-2 text-xs text-charcoal/55">Applied. Drag the slider to compare, or pick another change.</p>
-            </>
-          ) : option && !hairMode ? (
-            <>
-              {nowOption ? (
-                <CompareSlider
-                  before={exampleImage(kind, nowOption.id)}
-                  after={exampleImage(kind, option.id)}
-                  labels={[`Before (${nowOption.label})`, `After (${option.label})`]}
-                  natural
-                  focus={kind === "brows" ? "object-top" : "object-center"}
-                />
-              ) : (
-                <figure className="relative overflow-hidden rounded-2xl">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={exampleImage(kind, option.id)} alt={`${option.label} example`} className={clsx("h-56 w-full object-cover sm:h-64", kind === "brows" && "object-top")} />
-                  <figcaption className="absolute bottom-3 right-3 rounded-full bg-white/90 px-3 py-1 text-xs text-wine-700">After ({option.label})</figcaption>
-                </figure>
-              )}
-              <p className="mt-2 text-xs text-charcoal/55">Example look. Drag to compare, then click Preview on My Face to see it on your photo.</p>
-            </>
-          ) : (
-            <div className="flex aspect-[16/7] items-center justify-center rounded-2xl bg-blush-100/70 text-sm text-charcoal/55">
-              Pick an option to compare it with your current one.
-            </div>
-          )}
-        </section>
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
-            <button className="btn-primary text-base" onClick={apply} disabled={!preview}>
-              Apply Change <ArrowRight className="h-5 w-5" />
-            </button>
-            <button className="btn-outline text-base" onClick={undo} disabled={!preview && lab.history.length === 0}>
-              <RotateCcw className="h-4 w-4" /> Undo
-            </button>
-          </div>
-          <button
-            onClick={() => updateLab({ step: 5 })}
-            className="card flex items-center gap-4 p-4 text-left transition hover:bg-white"
-          >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blush-100">
-              <Check className="h-5 w-5 text-wine-700" />
-            </span>
-            <span className="flex-1">
-              <span className="block font-serif text-lg text-wine-700">Happy with your look?</span>
-              <span className="block text-sm text-charcoal/60">
-                {lab.history.length ? `${lab.history.length} change${lab.history.length > 1 ? "s" : ""} applied. ` : ""}See your final decision.
-              </span>
-            </span>
-            <ChevronRight className="h-5 w-5 text-wine-700" />
+      <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-stretch">
+        <div className="grid gap-3 lg:w-[220px]">
+          <button className="btn-outline text-base" onClick={undo} disabled={busy || lab.history.length === 0}>
+            <RotateCcw className="h-4 w-4" /> Undo
           </button>
-          <div className="text-right">
-            <RenderCounter />
-          </div>
         </div>
+        <button
+          onClick={() => updateLab({ step: 5 })}
+          disabled={busy}
+          className="group relative flex flex-1 items-center gap-4 overflow-hidden rounded-[22px] bg-gradient-to-r from-wine-700 via-rose-600 to-wine-700 px-5 py-4 text-left text-white shadow-card ring-2 ring-rose-300/60 ring-offset-2 ring-offset-blush-50 transition hover:brightness-110 disabled:opacity-60"
+        >
+          <span className="pointer-events-none absolute inset-y-0 left-0 w-1/3 animate-shimmer bg-gradient-to-r from-transparent via-white/25 to-transparent" />
+          <span className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20">
+            <span className="absolute inset-0 animate-pulseRing rounded-full border-2 border-white/70" />
+            <Check className="h-6 w-6" />
+          </span>
+          <span className="relative flex-1">
+            <span className="block font-serif text-2xl leading-tight">Happy with your look?</span>
+            <span className="block text-sm text-white/85">
+              {`${lab.history.length ? `${lab.history.length} change${lab.history.length > 1 ? "s" : ""} applied. ` : ""}Continue to your final decision`}
+            </span>
+          </span>
+          <span className="relative flex items-center gap-1 rounded-full bg-white px-4 py-2 font-serif text-lg text-wine-700 transition group-hover:translate-x-0.5">
+            Next <ArrowRight className="h-5 w-5" />
+          </span>
+        </button>
+      </div>
+      <div className="mt-2 text-right">
+        <RenderCounter />
       </div>
     </>
   );

@@ -27,6 +27,9 @@ export function StepDecision() {
   const profileName = useGlowStore((s) => s.profile.name);
   const finalSrc = useResolvedImage(lab.currentImage);
   const [compare, setCompare] = useState(false);
+  // Thumbnails are images already rendered earlier, so showing one in the main view costs nothing.
+  const [hoverKey, setHoverKey] = useState<string | null>(null);
+  const [pinnedKey, setPinnedKey] = useState<string | null>(null);
   const [card, setCard] = useState<"idle" | "busy" | "shared" | "downloaded" | "error">("idle");
   if (!lab.chosenLook || !lab.currentRecipe) return null;
 
@@ -79,6 +82,21 @@ export function StepDecision() {
     updateLab({ savedAt: new Date().toISOString() });
   };
   const others = BASE_LOOKS.filter((l) => lab.lookImages[l.id]);
+  const thumbs: { id: string; key: string; label: string }[] = [];
+  const seen = new Set<string>();
+  const addThumb = (key: string | null | undefined, label: string) => {
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    thumbs.push({ id: key, key, label });
+  };
+  addThumb(lab.currentImage, "Final");
+  lab.history
+    .slice()
+    .reverse()
+    .forEach((h, i) => addThumb(h.image, `Fine Tune step ${lab.history.length - i}`));
+  others.forEach((l) => addThumb(lab.lookImages[l.id], l.name));
+  const viewKey = hoverKey ?? pinnedKey ?? lab.currentImage;
+  const viewing = viewKey !== lab.currentImage ? thumbs.find((t) => t.key === viewKey) : null;
 
   return (
     <>
@@ -90,7 +108,7 @@ export function StepDecision() {
 
       <div className="grid gap-5 xl:grid-cols-[1fr_120px_1.05fr]">
         <div className="relative">
-          {compare && finalSrc && selfie ? (
+          {compare && finalSrc && selfie && !viewing ? (
             <CompareSlider
               before={selfie.dataUrl}
               after={finalSrc}
@@ -99,13 +117,25 @@ export function StepDecision() {
               focus="object-[50%_35%]"
             />
           ) : (
-            <LookImage imageKey={lab.currentImage} alt="Final look" className="card h-[420px] p-0 sm:h-[560px]">
-              <span className="absolute left-5 top-5 flex items-center gap-2 rounded-full bg-blush-100/95 px-4 py-2 text-wine-700">
-                <Check className="h-4 w-4" /> Final Selection
-              </span>
+            <LookImage imageKey={viewKey} alt={viewing ? viewing.label : "Final look"} className="card h-[420px] p-0 sm:h-[560px]">
+              {viewing ? (
+                <span className="absolute left-5 top-5 rounded-full bg-white/95 px-4 py-2 text-sm text-wine-700">Viewing: {viewing.label}</span>
+              ) : (
+                <span className="absolute left-5 top-5 flex items-center gap-2 rounded-full bg-blush-100/95 px-4 py-2 text-wine-700">
+                  <Check className="h-4 w-4" /> Final Selection
+                </span>
+              )}
+              {viewing && pinnedKey && !hoverKey && (
+                <button
+                  onClick={() => setPinnedKey(null)}
+                  className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-wine-700 px-5 py-2 text-sm text-white shadow-card"
+                >
+                  Back to final look
+                </button>
+              )}
             </LookImage>
           )}
-          {finalSrc && selfie && (
+          {finalSrc && selfie && !viewing && (
             <button
               onClick={() => setCompare((c) => !c)}
               aria-pressed={compare}
@@ -117,16 +147,34 @@ export function StepDecision() {
         </div>
 
         <div className="flex gap-3 overflow-x-auto xl:flex-col">
-          {[{ id: "final", key: lab.currentImage, label: "Final" }, ...others.map((l) => ({ id: l.id, key: lab.lookImages[l.id]!, label: l.name }))].map(
-            (t, i) => (
+          {thumbs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              title={t.label}
+              onMouseEnter={() => setHoverKey(t.key)}
+              onMouseLeave={() => setHoverKey(null)}
+              onFocus={() => setHoverKey(t.key)}
+              onBlur={() => setHoverKey(null)}
+              onClick={() => {
+                setCompare(false);
+                setPinnedKey(t.key === lab.currentImage ? null : t.key);
+              }}
+              className="group relative shrink-0 text-left xl:w-full"
+            >
               <LookImage
-                key={t.id}
                 imageKey={t.key}
                 alt={t.label}
-                className={clsx("h-28 w-24 shrink-0 rounded-2xl xl:h-32 xl:w-full", i === 0 && "ring-2 ring-rose-400")}
+                className={clsx(
+                  "h-28 w-24 rounded-2xl transition xl:h-32 xl:w-full",
+                  t.key === viewKey ? "ring-2 ring-rose-400" : "opacity-80 group-hover:opacity-100",
+                )}
               />
-            ),
-          )}
+              <span className="pointer-events-none absolute inset-x-1 bottom-1 truncate rounded-full bg-white/90 px-2 py-0.5 text-center text-[10px] text-wine-700">
+                {t.label}
+              </span>
+            </button>
+          ))}
         </div>
 
         <section className="card p-5 sm:p-6">

@@ -48,6 +48,7 @@ GlowFit AI is a beauty decision engine built on the **YouCam API**. One selfie g
 | API | Endpoints | Used for |
 |---|---|---|
 | Skin Analysis (SD/HD) | `POST /s2s/v2.0/file/skin-analysis`, `POST/GET /s2s/v2.0/task/skin-analysis` | 8 metrics, skin type, mask overlays (`enable_mask_overlay`) |
+| AI Face Analyzer | `POST /s2s/v2.0/file`, `POST/GET /s2s/v2.0/task/face-attr-analysis` | Face shape, eye, lip and brow shape (5 features, 10 units), runs with each scan |
 | Makeup VTO | `POST /s2s/v2.0/file/makeup-vto`, `POST/GET /s2s/v2.0/task/makeup-vto` | 3 looks + every "Change One Thing" preview |
 | AI Hairstyle (hair transfer) | `/s2s/v2.1/task/template/hair-transfer`, `POST/GET /s2s/v2.1/task/hair-transfer` | Hairstyle templates and try-on on the finished look |
 | Credit balance | `GET /s2s/v1.0/client/credit` | Key check and the public-demo reserve |
@@ -58,7 +59,7 @@ The API key stays on the server (Next.js route handlers in `src/app/api/youcam/`
 
 | Step | YouCam calls |
 |---|---|
-| Skin Scan | 1 analysis; HD only when the photo's short side is 1080px or more |
+| Skin Scan | 1 skin analysis (HD only when the photo's short side is 1080px or more) + 1 face analysis (10 units) |
 | Moment, Budget, Decision | none |
 | Three Looks | 3 renders, only when you click **Generate** |
 | Change One Thing | 1 render per **Preview**; impact scores are free |
@@ -67,6 +68,7 @@ The API key stays on the server (Next.js route handlers in `src/app/api/youcam/`
 - The selfie is uploaded once and its `file_id` is reused for every render.
 - Every render is cached in the browser (IndexedDB) by selfie and recipe, so the same look never costs twice.
 - Demo mode and the sample face return bundled images and spend nothing.
+- On-device MediaPipe (served from `public/mediapipe`) frames the face before upload and paints lip, eye and blush option previews on the user's own photo, with no API calls.
 
 ## Run locally
 
@@ -88,6 +90,7 @@ Open http://localhost:3000. With no key, or with `GLOWFIT_DEMO_MODE=1`, the app 
 | `YOUCAM_API_KEY` | empty | Your YouCam API key (server only) |
 | `YOUCAM_API_BASE` | `https://yce-api-01.makeupar.com` | YouCam API base URL |
 | `GLOWFIT_DEMO_MODE` | `0` | `1` = always use sample results |
+| `GLOWFIT_FACE_SHAPE` | `1` | `0` = skip the Face Analyzer call on each scan (saves 10 units) |
 | `GLOWFIT_PUBLIC_DEMO` | `0` | `1` = turn on per-visitor limits for a public link |
 | `GLOWFIT_MAX_SCANS` | `2` | Real skin scans per visitor (public demo) |
 | `GLOWFIT_MAX_UNITS` | `12` | Real render units per visitor (public demo) |

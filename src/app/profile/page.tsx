@@ -27,6 +27,7 @@ import {
   Wallet,
   Gem,
   Shapes,
+  ScanFace,
   type LucideIcon,
 } from "lucide-react";
 import { useGlowStore, initialProfile } from "@/store/glowfit";
@@ -37,6 +38,8 @@ import { describeRecipe, getBaseLook, labProducts, type LookId } from "@/lib/loo
 import { OCCASIONS, labelOccasion, type Occasion, type StylePref } from "@/lib/scoring";
 import { deleteRenders } from "@/lib/renderCache";
 import { SkinReport } from "@/components/skin/SkinReport";
+import { ProfileSaveShare } from "@/components/skin/ProfileSaveShare";
+import { faceShapeLabel } from "@/lib/skin";
 import { useRestoreLook } from "@/lib/useRestoreLook";
 
 const STYLES: { id: StylePref; label: string; line: string; look: LookId }[] = [
@@ -207,6 +210,11 @@ function ProfilePage() {
             <span className="chip">
               <CalendarDays className="h-3.5 w-3.5" /> {labelOccasion(lab.moment.occasion)}
             </span>
+            {skin?.face && (
+              <a href="#skin-profile" className="chip hover:text-wine-700">
+                <ScanFace className="h-3.5 w-3.5" /> {faceShapeLabel(skin.face.faceShape)} face
+              </a>
+            )}
           </div>
 
           <div className="mt-auto grid gap-4 pt-6 sm:grid-cols-3 sm:divide-x sm:divide-blush-200">
@@ -216,6 +224,8 @@ function ProfilePage() {
           </div>
         </div>
       </section>
+
+      <ProfileSaveShare />
 
       {deleted && (
         <p className="mt-4 rounded-2xl bg-sage/10 px-4 py-3 text-sm text-sage">

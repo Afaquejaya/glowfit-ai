@@ -6,6 +6,7 @@ import type { SkinResult } from "@/lib/skin";
 import type { LookId, ProductPicks, Recipe } from "@/lib/looks";
 import type { Moment, Occasion } from "@/lib/scoring";
 import type { FaceShape } from "@/lib/hairMatch";
+import type { PdfLook, PdfPrefs } from "@/lib/profilePdf";
 
 export type Selfie = { dataUrl: string; width: number; height: number; source: "camera" | "upload" };
 
@@ -50,6 +51,9 @@ export type ScanEntry = { id: string; at: string; skin: SkinResult; photo: strin
 
 export type SavedPerson = { id: string; name: string; photo: string; skin: SkinResult };
 
+/** A named snapshot of one person's skin and face analysis, saved from the Profile page. */
+export type SavedProfile = { id: string; name: string; savedAt: string; photo: string; skin: SkinResult; look?: PdfLook; prefs?: PdfPrefs };
+
 /** What the user tells us about themselves on the Profile page. */
 export type Profile = { name: string; tagline: string; occasions: Occasion[]; hairGender?: "women" | "men"; faceShape?: FaceShape | null };
 
@@ -71,6 +75,9 @@ type GlowState = {
   bag: string[]; // product ids the user added on the Products page
   profile: Profile;
   savedLooks: SavedLook[];
+  savedProfiles: SavedProfile[];
+  saveProfile: (p: SavedProfile) => void;
+  removeProfile: (id: string) => void;
   saveLook: (look: SavedLook) => void;
   removeSavedLook: (id: string) => void;
   renamePerson: (personId: string, name: string) => void;
@@ -121,6 +128,10 @@ export const useGlowStore = create<GlowState>()(
       bag: [],
       profile: initialProfile,
       savedLooks: [],
+      savedProfiles: [],
+      // Saving the same scan again only renames it.
+      saveProfile: (p) => set((s) => ({ savedProfiles: [p, ...s.savedProfiles.filter((x) => x.id !== p.id)].slice(0, 12) })),
+      removeProfile: (id) => set((s) => ({ savedProfiles: s.savedProfiles.filter((x) => x.id !== id) })),
       scans: [],
       addScan: (scan) => set((s) => ({ scans: [...s.scans.filter((x) => x.id !== scan.id), scan].slice(-24) })),
       updateScan: (id, patch) => set((s) => ({ scans: s.scans.map((x) => (x.id === id ? { ...x, ...patch } : x)) })),

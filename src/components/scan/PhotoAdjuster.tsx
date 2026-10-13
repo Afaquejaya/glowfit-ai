@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Minus, Move, Plus, RotateCcw, X } from "lucide-react";
+import { Check, Minus, Move, Plus, RotateCcw, ScanFace, X } from "lucide-react";
 import { cropImage, type PreparedImage } from "@/lib/image";
+import { detectFace, type FaceBox } from "@/lib/faceDetect";
 
 type Props = { src: string; onApply: (img: PreparedImage) => void; onCancel: () => void };
 
@@ -13,6 +14,9 @@ const MIN_CROP_PX = 480;
 // Portrait crop window (4:5), the same shape YouCam skin analysis works best with.
 const WINDOW_HEIGHT = 0.9;
 const WINDOW_RATIO = 4 / 5;
+// YouCam rejects photos where the face is small, so auto-framing makes the face fill most of the window.
+const FACE_TARGET = 0.62;
+const FACE_MIN = 0.45;
 
 /** Drag to move, zoom with the slider, mouse wheel or pinch, then crop to the face frame. */
 export function PhotoAdjuster({ src, onApply, onCancel }: Props) {
@@ -24,6 +28,18 @@ export function PhotoAdjuster({ src, onApply, onCancel }: Props) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [busy, setBusy] = useState(false);
+  const [face, setFace] = useState<FaceBox | null | undefined>(undefined);
+  const framed = useRef(false);
+
+  useEffect(() => {
+    let alive = true;
+    framed.current = false;
+    setFace(undefined);
+    detectFace(src).then((f) => alive && setFace(f));
+    return () => {
+      alive = false;
+    };
+  }, [src]);
 
   useEffect(() => {
     const el = box.current;
@@ -57,6 +73,26 @@ export function PhotoAdjuster({ src, onApply, onCancel }: Props) {
     },
     [scale, natural, win.w, win.h],
   );
+
+  // Zooms and centres the crop window on the detected face.
+  const fitFace = useCallback(() => {
+    if (!face || !natural.w || !base) return;
+    const z = Math.max(MIN_ZOOM, Math.min(maxZoom, (FACE_TARGET * win.w) / (face.w * base)));
+    const s = base * z;
+    const cx = face.x + face.w / 2 - natural.w / 2;
+    const cy = face.y + face.h / 2 - natural.h / 2;
+    setZoom(z);
+    setOffset(clamp({ x: -cx * s, y: 0.02 * win.h - cy * s }, s));
+  }, [face, natural, base, maxZoom, win.w, win.h, clamp]);
+
+  useEffect(() => {
+    if (framed.current || !face || !size.w || !natural.w) return;
+    framed.current = true;
+    fitFace();
+  }, [face, size.w, natural.w, fitFace]);
+
+  const faceFrac = face ? (face.w * scale) / win.w : null;
+  const faceSmall = faceFrac !== null && faceFrac < FACE_MIN;
 
   const setZoomClamped = (z: number) => {
     const nz = Math.max(MIN_ZOOM, Math.min(maxZoom, z));
@@ -162,6 +198,17 @@ export function PhotoAdjuster({ src, onApply, onCancel }: Props) {
         <span className="pointer-events-none absolute left-1/2 top-3 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full bg-black/40 px-3 py-1 text-xs text-white backdrop-blur">
           <Move className="h-3.5 w-3.5" /> Drag to move · scroll or pinch to zoom
         </span>
+        {face !== undefined && (
+          <span
+            className={
+              "pointer-events-none absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1 text-xs backdrop-blur " +
+              (face === null ? "bg-black/40 text-white" : faceSmall ? "bg-rose-600/90 text-white" : "bg-sage/90 text-white")
+            }
+          >
+            <ScanFace className="h-3.5 w-3.5" />
+            {face === null ? "Zoom in so your face fills the oval" : faceSmall ? "Face too small: zoom in or tap Fit Face" : "Auto-framed to your face"}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 bg-white/80 px-4 py-3">
@@ -181,6 +228,11 @@ export function PhotoAdjuster({ src, onApply, onCancel }: Props) {
         <button onClick={() => setZoomClamped(zoom * 1.2)} aria-label="Zoom in" className="flex h-9 w-9 items-center justify-center rounded-full bg-blush-100 text-wine-700">
           <Plus className="h-4 w-4" />
         </button>
+        {face && (
+          <button onClick={fitFace} className="flex items-center gap-1.5 rounded-full bg-blush-100 px-3 py-2 text-xs text-wine-700">
+            <ScanFace className="h-4 w-4" /> Fit Face
+          </button>
+        )}
         <button onClick={reset} aria-label="Reset" className="flex h-9 w-9 items-center justify-center rounded-full bg-blush-100 text-wine-700">
           <RotateCcw className="h-4 w-4" />
         </button>

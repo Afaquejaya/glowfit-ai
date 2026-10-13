@@ -1,5 +1,5 @@
 import "server-only";
-import { METRIC_KEYS, METRIC_LABELS, overallScore, type SkinMetric, type SkinMetricKey, type SkinResult } from "./skin";
+import { METRIC_KEYS, METRIC_LABELS, overallScore, type FaceAttrs, type SkinMetric, type SkinMetricKey, type SkinResult } from "./skin";
 
 // Server-side YouCam API client. The API key never reaches the browser.
 // Flow per feature: create file -> PUT upload -> create task -> poll task.
@@ -258,3 +258,31 @@ export const HAIR_ERROR_HINTS: Record<string, string> = {
   error_insufficient_landmarks: "We couldn't see enough of your face and shoulders. Try a clearer, wider photo.",
   error_hair_too_short: "Your hair in the photo is too short for this style transfer.",
 };
+
+// ---------- Face Analyzer (face structure) ----------
+
+// Five features keep the call at the lowest price tier (10 units, charged only on success).
+export const FACE_FEATURES = ["faceShape", "eyeShape", "lipShape", "eyebrowShape", "cheekbones"];
+
+export type RawFaceResults = {
+  faceshape?: string;
+  eyelid?: { left_shape?: string; right_shape?: string };
+  lipshape?: string[];
+  eyebrow?: { left_shape?: string; right_shape?: string };
+  cheekbone?: { overrall?: string; overall?: string };
+};
+
+export function normalizeFace(r: RawFaceResults): FaceAttrs | null {
+  if (!r?.faceshape || r.faceshape === "Unknown") return null;
+  return {
+    faceShape: r.faceshape,
+    eyeShape: r.eyelid?.left_shape || r.eyelid?.right_shape,
+    lipShape: r.lipshape?.[0],
+    eyebrowShape: r.eyebrow?.left_shape || r.eyebrow?.right_shape,
+    cheekbones: r.cheekbone?.overall || r.cheekbone?.overrall,
+  };
+}
+
+export function faceShapeEnabled() {
+  return process.env.GLOWFIT_FACE_SHAPE !== "0";
+}

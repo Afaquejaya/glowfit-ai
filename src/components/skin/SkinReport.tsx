@@ -1,5 +1,6 @@
 "use client";
 
+import { FaceStructure } from "./FaceStructure";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
@@ -261,6 +262,9 @@ export function SkinReport({ skin, photo, sample }: { skin: SkinResult; photo: s
             </button>
           </div>
         </section>
+
+        {/* Face shape and proportions, next to the skin profile */}
+        <FaceStructure face={skin.face} photo={photo} />
 
         {/* Priorities */}
         <section className="card p-5 sm:p-6 lg:col-span-2">

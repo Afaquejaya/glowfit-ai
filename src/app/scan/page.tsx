@@ -10,6 +10,8 @@ import { QualityTiles } from "@/components/scan/QualityTiles";
 import { AnalyzingOverlay } from "@/components/scan/AnalyzingOverlay";
 import { ApiStatus } from "@/components/scan/ApiStatus";
 import { PhotoAdjuster } from "@/components/scan/PhotoAdjuster";
+import { warmFaceDetector } from "@/lib/faceDetect";
+import { FACE_SHAPE_MAP } from "@/lib/skin";
 import { captureVideo, dataUrlToPrepared, prepareFile, type PreparedImage } from "@/lib/image";
 import { useSkinAnalysis } from "@/lib/useSkinAnalysis";
 import { thumbnail } from "@/lib/thumbnail";
@@ -47,6 +49,8 @@ export default function ScanPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const { phase, error, run } = useSkinAnalysis();
   const busy = phase === "uploading" || phase === "analyzing";
+
+  useEffect(() => warmFaceDetector(), []);
 
   // Restore the last selfie so a page refresh doesn't lose it.
   // Read straight from the store: during hydration the hook still returns the initial empty state.
@@ -94,6 +98,9 @@ export default function ScanPage() {
     const result = await run(image, { sample: useGlowStore.getState().sampleFace });
     if (result) {
       setSkin(result);
+      // The detected face shape drives hairstyle matching from now on.
+      const shape = result.face ? FACE_SHAPE_MAP[result.face.faceShape.toLowerCase()] : undefined;
+      if (shape) useGlowStore.getState().setProfile({ faceShape: shape });
       // Every analysis also goes into the Skin Journey, with a small copy of the photo.
       const photo = await thumbnail(image.dataUrl, 360).catch(() => null);
       useGlowStore.getState().addScan({ id: `scan-${Date.now()}`, at: result.analyzedAt, skin: result, photo, note: "" });

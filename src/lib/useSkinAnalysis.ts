@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { friendlyError, networkSafe, type SkinResult } from "./skin";
+import { friendlyError, networkSafe, type FaceAttrs, type SkinResult } from "./skin";
 import type { PreparedImage } from "./image";
 import { notifyLimited } from "./limits";
 
@@ -9,6 +9,24 @@ type Phase = "idle" | "uploading" | "analyzing" | "done" | "error";
 
 const POLL_MS = 2000;
 const TIMEOUT_MS = 120_000;
+const FACE_TIMEOUT_MS = 90_000;
+
+/** Polls the YouCam Face Analyzer task that the skin route started. Never throws. */
+async function pollFace(taskId: string | null | undefined): Promise<FaceAttrs | null> {
+  if (!taskId) return null;
+  const t0 = Date.now();
+  while (Date.now() - t0 < FACE_TIMEOUT_MS) {
+    await new Promise((r) => setTimeout(r, POLL_MS));
+    try {
+      const body = await (await fetch(`/api/youcam/face/${encodeURIComponent(taskId)}`)).json();
+      if (body.status === "success") return (body.face as FaceAttrs | null) ?? null;
+      if (body.status === "error") return null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
 
 /** Starts a skin-analysis task through our API route and polls it until it finishes. */
 export function useSkinAnalysis() {
@@ -32,14 +50,16 @@ export function useSkinAnalysis() {
       if (started.limited) notifyLimited(started.limited);
 
       setPhase("analyzing");
+      const face = pollFace(started.faceTaskId);
       const t0 = Date.now();
       while (!cancelled.current) {
         await new Promise((r) => setTimeout(r, POLL_MS));
         const res = await fetch(`/api/youcam/skin/${encodeURIComponent(started.taskId)}?mode=${started.mode}`);
         const body = await res.json();
         if (body.status === "success") {
+          const result = { ...(body.result as SkinResult), face: await face };
           setPhase("done");
-          return body.result as SkinResult;
+          return result;
         }
         if (body.status === "error") throw new Error(friendlyError(body.error));
         if (Date.now() - t0 > TIMEOUT_MS) throw new Error("The analysis is taking too long. Please try again.");

@@ -6,6 +6,7 @@ import { ArrowRight, Bot, Camera, CalendarDays, Cpu, FlaskConical, LineChart, Sc
 import { useGlowStore } from "@/store/glowfit";
 import { GlowLoader } from "@/components/ui/GlowLoader";
 import { SkinReport } from "@/components/skin/SkinReport";
+import { DecisionLabCta } from "@/components/skin/NextStepCards";
 import { labelOccasion } from "@/lib/scoring";
 
 const MODE_LABEL = { hd: "HD analysis", sd: "SD analysis", demo: "Sample analysis" } as const;
@@ -89,6 +90,8 @@ export default function SkinIntelligencePage() {
       <div className="mt-6">
         <SkinReport skin={skin} photo={selfie?.dataUrl ?? "/profile/avatar.jpg"} sample={!selfie} />
       </div>
+
+      <DecisionLabCta photo={selfie?.dataUrl} />
 
       <section className="mt-6 grid gap-4 md:grid-cols-3">
         {next.map((n) => (

@@ -136,3 +136,8 @@ export function matchHair(
   }
   return { score: Math.max(55, Math.min(98, score)), reasons };
 }
+
+/** One-line stylist tip for a face shape. */
+export function faceTip(shape: FaceShape) {
+  return FACE_FIT[shape].why;
+}
