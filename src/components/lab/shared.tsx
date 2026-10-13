@@ -215,14 +215,30 @@ export function CompareSlider({
   labels,
   className = "aspect-[16/7] rounded-2xl",
   focus = "object-[50%_62%]",
+  natural = false,
 }: {
   before: string;
   after: string;
   labels: [string, string];
   className?: string;
   focus?: string;
+  /** Show the whole photo at its own shape instead of cropping it to a fixed banner. */
+  natural?: boolean;
 }) {
   const [pos, setPos] = useState(50);
+  const [ratio, setRatio] = useState<number | null>(null);
+  useEffect(() => {
+    if (!natural) return;
+    let alive = true;
+    const img = new Image();
+    img.onload = () => alive && img.naturalHeight && setRatio(img.naturalWidth / img.naturalHeight);
+    img.src = after;
+    return () => {
+      alive = false;
+    };
+  }, [after, natural]);
+  const r = ratio ?? 3 / 4;
+  const sizing = natural ? { aspectRatio: String(r), width: `min(100%, calc(72vh * ${r}))` } : undefined;
   const ref = useRef<HTMLDivElement>(null);
   const move = (clientX: number) => {
     const r = ref.current?.getBoundingClientRect();
@@ -231,7 +247,8 @@ export function CompareSlider({
   return (
     <div
       ref={ref}
-      className={clsx("relative w-full cursor-ew-resize touch-none select-none overflow-hidden", className)}
+      style={sizing}
+      className={clsx("relative cursor-ew-resize touch-none select-none overflow-hidden", natural ? "mx-auto rounded-2xl bg-blush-50" : "w-full", !natural && className)}
       onPointerDown={(e) => {
         (e.target as HTMLElement).setPointerCapture(e.pointerId);
         move(e.clientX);

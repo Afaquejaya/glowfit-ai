@@ -57,7 +57,9 @@ export function StepFineTune() {
   const [hairPick, setHairPick] = useState<HairStyle | null>(null);
   const [hairDemo, setHairDemo] = useState(false);
   const [optionId, setOptionId] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ recipe: Recipe; key: string } | null>(null);
+  const [preview, setPreview] = useState<{ recipe: Recipe; key: string; label: string } | null>(null);
+  // The last change the user applied, so the slider can keep comparing it after Apply.
+  const [applied, setApplied] = useState<{ before: string | null; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,6 +83,7 @@ export function StepFineTune() {
 
   const beforeSrc = useResolvedImage(lab.currentImage);
   const afterSrc = useResolvedImage(preview?.key);
+  const appliedBeforeSrc = useResolvedImage(applied?.before);
 
   const look = lab.chosenLook ? getBaseLook(lab.chosenLook) : null;
   const current = lab.currentRecipe;
@@ -122,7 +125,8 @@ export function StepFineTune() {
         key = done.key;
         setHairDemo(done.demo);
       }
-      setPreview({ recipe: candidate, key });
+      setPreview({ recipe: candidate, key, label: pickLabel ?? "new" });
+      setApplied(null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -137,12 +141,14 @@ export function StepFineTune() {
       currentRecipe: preview.recipe,
       currentImage: preview.key,
     });
+    setApplied({ before: lab.currentImage, label: preview.label });
     setPreview(null);
     setOptionId(null);
     setHairPick(null);
   };
 
   const undo = () => {
+    setApplied(null);
     if (preview) {
       setPreview(null);
       setOptionId(null);
@@ -361,56 +367,46 @@ export function StepFineTune() {
             Before vs After {hairMode ? (hairPick ? "· Hairstyle Change" : "") : option ? `· ${CHANGE_OPTIONS[kind].label} Change` : ""}
           </p>
           {beforeSrc && afterSrc && preview ? (
-            <CompareSlider before={beforeSrc} after={afterSrc} labels={["Before", `After (${pickLabel ?? "new"})`]} />
-          ) : hairMode && hairPick ? (
+            <CompareSlider before={beforeSrc} after={afterSrc} labels={["Before", `After (${preview.label})`]} natural focus="object-center" />
+          ) : applied && appliedBeforeSrc && beforeSrc && !hairPick && !option ? (
             <>
-              <div className="grid grid-cols-2 gap-3">
-                <figure className="relative overflow-hidden rounded-2xl bg-blush-100">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  {beforeSrc && <img src={beforeSrc} alt="Your current look" className="h-56 w-full object-cover sm:h-64" />}
-                  <figcaption className="absolute bottom-3 left-3 rounded-full bg-cocoa-900/80 px-3 py-1 text-xs text-white">
-                    Now ({current.hair?.title ?? "your hair"})
-                  </figcaption>
-                </figure>
-                <figure className="relative flex items-center justify-center overflow-hidden rounded-2xl bg-blush-100">
-                  {hairPick.thumb ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={hairPick.thumb} alt={hairPick.title} className="h-56 w-full object-cover sm:h-64" />
-                  ) : (
-                    <Scissors className="h-10 w-10 text-rose-400" strokeWidth={1.3} />
-                  )}
-                  <figcaption className="absolute bottom-3 right-3 rounded-full bg-white/90 px-3 py-1 text-xs text-wine-700">Style ({hairPick.title})</figcaption>
-                </figure>
-              </div>
-              <p className="mt-2 text-xs text-charcoal/55">Style reference. Click Try This Hairstyle to see it on your face with your makeup.</p>
+              <CompareSlider before={appliedBeforeSrc} after={beforeSrc} labels={["Before", `After (${applied.label})`]} natural focus="object-center" />
+              <p className="mt-2 text-xs text-charcoal/55">Applied. Drag the slider to compare, or pick another change.</p>
+            </>
+          ) : hairMode && hairPick && beforeSrc ? (
+            <>
+              {hairPick.thumb ? (
+                <CompareSlider
+                  before={beforeSrc}
+                  after={hairPick.thumb}
+                  labels={[`Now (${current.hair?.title ?? "your hair"})`, `Style (${hairPick.title})`]}
+                  natural
+                  focus="object-top"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={beforeSrc} alt="Your current look" className="mx-auto rounded-2xl object-contain" style={{ width: "min(100%, calc(72vh * 0.75))" }} />
+              )}
+              <p className="mt-2 text-xs text-charcoal/55">Drag to compare your look with the style. Click Try This Hairstyle to see it on your own photo.</p>
             </>
           ) : option && !hairMode ? (
             <>
-              {kind === "lip" && nowOption ? (
+              {nowOption ? (
                 <CompareSlider
                   before={exampleImage(kind, nowOption.id)}
                   after={exampleImage(kind, option.id)}
                   labels={[`Before (${nowOption.label})`, `After (${option.label})`]}
+                  natural
+                  focus={kind === "brows" ? "object-top" : "object-center"}
                 />
               ) : (
-                <div className={clsx("grid gap-3", nowOption && "grid-cols-2")}>
-                  {[...(nowOption ? [["Before", nowOption] as const] : []), ["After", option] as const].map(([tag, o]) => (
-                    <figure key={tag} className="relative overflow-hidden rounded-2xl">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={exampleImage(kind, o.id)} alt={`${o.label} example`} className={clsx("h-56 w-full object-cover sm:h-64", kind === "brows" && "object-top")} />
-                      <figcaption
-                        className={clsx(
-                          "absolute bottom-3 rounded-full px-3 py-1 text-xs",
-                          tag === "Before" ? "left-3 bg-cocoa-900/80 text-white" : "right-3 bg-white/90 text-wine-700",
-                        )}
-                      >
-                        {tag} ({o.label})
-                      </figcaption>
-                    </figure>
-                  ))}
-                </div>
+                <figure className="relative overflow-hidden rounded-2xl">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={exampleImage(kind, option.id)} alt={`${option.label} example`} className={clsx("h-56 w-full object-cover sm:h-64", kind === "brows" && "object-top")} />
+                  <figcaption className="absolute bottom-3 right-3 rounded-full bg-white/90 px-3 py-1 text-xs text-wine-700">After ({option.label})</figcaption>
+                </figure>
               )}
-              <p className="mt-2 text-xs text-charcoal/55">Example look. Click Preview on My Face to see it on your photo.</p>
+              <p className="mt-2 text-xs text-charcoal/55">Example look. Drag to compare, then click Preview on My Face to see it on your photo.</p>
             </>
           ) : (
             <div className="flex aspect-[16/7] items-center justify-center rounded-2xl bg-blush-100/70 text-sm text-charcoal/55">
