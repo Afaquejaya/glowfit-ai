@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { ArrowRight, Brush, Check, ChevronRight, Crown, Droplet, Eye, Info, Palette, RotateCcw, Scissors, Sparkle, Sparkles, Wand2 } from "lucide-react";
 import { useGlowStore } from "@/store/glowfit";
@@ -9,6 +9,7 @@ import { impactOf, labelOccasion, OCCASIONS, type Occasion } from "@/lib/scoring
 import { CATEGORIES, FACE_SHAPES, inCategory, matchHair, type FaceShape, type HairCategory } from "@/lib/hairMatch";
 import { money } from "@/lib/catalog";
 import { useMakeupRender } from "@/lib/useMakeupRender";
+import { HairRenderLoader } from "./HairRenderLoader";
 import { stylesFor, useHairRender, useHairstyles, type HairStyle } from "@/lib/useHairRender";
 import { CompareSlider, LabHeader, LookImage, RenderCounter, useResolvedImage } from "./shared";
 
@@ -62,6 +63,14 @@ export function StepFineTune() {
   const [applied, setApplied] = useState<{ before: string | null; label: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Picking a hairstyle renders it on the user's own photo right away.
+  const [autoHair, setAutoHair] = useState(false);
+  const runRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!autoHair || busy) return;
+    setAutoHair(false);
+    runRef.current();
+  }, [autoHair, busy, hairPick]);
 
   // Glow Assistant can send the user here with a change already picked.
   useEffect(() => {
@@ -132,6 +141,14 @@ export function StepFineTune() {
     } finally {
       setBusy(false);
     }
+  };
+
+  runRef.current = () => {
+    if (!previewMatches) void runPreview();
+  };
+  const pickHair = (s: HairStyle) => {
+    setHairPick(s);
+    setAutoHair(true);
   };
 
   const apply = () => {
@@ -228,7 +245,7 @@ export function StepFineTune() {
               onRetry={hair.retry}
               current={current.hair?.id ?? null}
               picked={hairPick?.id ?? null}
-              onPick={setHairPick}
+              onPick={pickHair}
             />
           ) : (
           <>
@@ -313,13 +330,20 @@ export function StepFineTune() {
           </button>
           <p className="mt-2 text-center text-[11px] text-charcoal/50">
             {hairMode || current.hair
-              ? "Hairstyle try-on uses 2 render units (free if you tried it before)"
+              ? hairMode
+                ? "Each hairstyle you pick is applied to your photo (2 render units, free if tried before)"
+                : "Hairstyle try-on uses 2 render units (free if you tried it before)"
               : "Uses 1 try-on render (free if you previewed it before)"}
           </p>
         </div>
 
         <article className="card h-fit overflow-hidden p-0">
-          <LookImage imageKey={preview?.key ?? lab.currentImage} alt="Updated look" loading={busy} className="m-1.5 h-72 rounded-[22px] sm:h-96">
+          <LookImage
+            imageKey={preview?.key ?? lab.currentImage}
+            alt="Updated look"
+            loading={busy}
+            loader={hairMode && hairPick ? <HairRenderLoader styleName={hairPick.title} /> : undefined}
+            className="m-1.5 h-72 rounded-[22px] sm:h-96">
             <span className="absolute left-4 top-4 rounded-full bg-blush-100/95 px-4 py-1.5 text-xs tracking-[0.18em] text-wine-700">UPDATED LOOK</span>
             <span className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-white/90 px-3 py-1.5 text-xs text-wine-700">
               <Crown className="h-3.5 w-3.5" /> AI PREVIEW
@@ -328,7 +352,7 @@ export function StepFineTune() {
               <span className="absolute inset-x-6 bottom-6 rounded-2xl bg-white/85 p-3 text-center text-sm text-charcoal/70 backdrop-blur">
                 {hairMode ? (
                   <>
-                    Pick a hairstyle, then click <b>Try This Hairstyle</b>.
+                    Pick a hairstyle to see it on your own photo.
                   </>
                 ) : (
                   <>
@@ -366,28 +390,26 @@ export function StepFineTune() {
           <p className="mb-2 font-serif text-lg">
             Before vs After {hairMode ? (hairPick ? "· Hairstyle Change" : "") : option ? `· ${CHANGE_OPTIONS[kind].label} Change` : ""}
           </p>
-          {beforeSrc && afterSrc && preview ? (
+          {hairMode && hairPick && !previewMatches && beforeSrc ? (
+            <div className="relative mx-auto overflow-hidden rounded-2xl bg-blush-50" style={{ width: "min(100%, calc(72vh * 0.75))" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={beforeSrc} alt="Your current look" className="w-full object-contain" />
+              {busy ? (
+                <HairRenderLoader styleName={hairPick.title} />
+              ) : (
+                <span className="absolute inset-x-4 bottom-4 rounded-2xl bg-white/90 p-3 text-center text-sm text-charcoal/70 backdrop-blur">
+                  {error
+                    ? "This hairstyle could not be applied. Click Try This Hairstyle to retry."
+                    : `Click Try This Hairstyle to apply ${hairPick.title} to your photo.`}
+                </span>
+              )}
+            </div>
+          ) : beforeSrc && afterSrc && preview ? (
             <CompareSlider before={beforeSrc} after={afterSrc} labels={["Before", `After (${preview.label})`]} natural focus="object-center" />
           ) : applied && appliedBeforeSrc && beforeSrc && !hairPick && !option ? (
             <>
               <CompareSlider before={appliedBeforeSrc} after={beforeSrc} labels={["Before", `After (${applied.label})`]} natural focus="object-center" />
               <p className="mt-2 text-xs text-charcoal/55">Applied. Drag the slider to compare, or pick another change.</p>
-            </>
-          ) : hairMode && hairPick && beforeSrc ? (
-            <>
-              {hairPick.thumb ? (
-                <CompareSlider
-                  before={beforeSrc}
-                  after={hairPick.thumb}
-                  labels={[`Now (${current.hair?.title ?? "your hair"})`, `Style (${hairPick.title})`]}
-                  natural
-                  focus="object-top"
-                />
-              ) : (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={beforeSrc} alt="Your current look" className="mx-auto rounded-2xl object-contain" style={{ width: "min(100%, calc(72vh * 0.75))" }} />
-              )}
-              <p className="mt-2 text-xs text-charcoal/55">Drag to compare your look with the style. Click Try This Hairstyle to see it on your own photo.</p>
             </>
           ) : option && !hairMode ? (
             <>

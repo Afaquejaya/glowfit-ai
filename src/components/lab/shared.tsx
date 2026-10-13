@@ -116,12 +116,15 @@ export function LookImage({
   alt,
   className,
   loading,
+  loader,
   children,
 }: {
   imageKey: string | null | undefined;
   alt: string;
   className?: string;
   loading?: boolean;
+  /** Replaces the default makeup loader while loading. */
+  loader?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const src = useResolvedImage(imageKey);
@@ -133,7 +136,8 @@ export function LookImage({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={shown} alt={alt} className={clsx("h-full w-full object-cover", !src && "opacity-60 saturate-50")} />
       )}
-      {loading && (
+      {loading && loader}
+      {loading && !loader && (
         <>
           <GlowLoader
             variant="overlay"
