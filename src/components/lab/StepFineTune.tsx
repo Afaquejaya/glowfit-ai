@@ -69,6 +69,15 @@ export function StepFineTune() {
   // Picking an option or a hairstyle renders it on the user's own photo right away.
   const [autoRun, setAutoRun] = useState(false);
   const runRef = useRef<() => void>(() => {});
+  // The "Updated look" card, brought into view when a render starts so the user sees it processing.
+  const resultRef = useRef<HTMLElement>(null);
+  const showResult = () => {
+    const el = resultRef.current;
+    if (!el) return;
+    const { top } = el.getBoundingClientRect();
+    // Only scroll when the card's top is hidden under the header or below the middle of the screen.
+    if (top < 96 || top > window.innerHeight * 0.5) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   useEffect(() => {
     if (!autoRun || busy) return;
     setAutoRun(false);
@@ -129,6 +138,7 @@ export function StepFineTune() {
     setBusy(true);
     setError(null);
     setHairDemo(false);
+    showResult();
     try {
       const demoKey = !hairMode && (kind === "lip" || kind === "blush") ? "change" : lab.chosenLook!;
       // Makeup is always rendered on the selfie first (cached, so repeats are free), then the hairstyle on top.
@@ -353,7 +363,7 @@ export function StepFineTune() {
           </p>
         </div>
 
-        <article className="card h-fit overflow-hidden p-0">
+        <article ref={resultRef} className="card h-fit scroll-mt-24 overflow-hidden p-0">
           <div className="relative m-1.5">
             {!busy && applied && appliedBeforeSrc && beforeSrc ? (
               <CompareSlider before={appliedBeforeSrc} after={beforeSrc} labels={["Before", "After"]} natural focus="object-center" />
