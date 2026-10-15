@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTask, isDemoMode, normalizeSkin, type RawSkinResults, YouCamError } from "@/lib/youcam";
 import { demoSkinResult } from "@/lib/demo";
+import { refundQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 
@@ -22,7 +23,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ taskId: 
     if (task.status === "success") {
       return NextResponse.json({ status: "success", result: normalizeSkin(task.results, mode) });
     }
-    if (task.status === "error") return NextResponse.json({ status: "error", error: task.code });
+    if (task.status === "error") {
+      // YouCam rejected the photo (turned face, no face, too dark...): give the scan back so a retry is real.
+      await refundQuota("scan");
+      return NextResponse.json({ status: "error", error: task.code });
+    }
     return NextResponse.json({ status: "running" });
   } catch (e) {
     const err = e as YouCamError;

@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
-import { ArrowRight, Camera, Check, Crop, ImageIcon, Lock, RotateCcw, Sparkles, Upload, UserRound } from "lucide-react";
+import { AlertCircle, ArrowRight, Camera, Check, Crop, ImageIcon, Lock, RotateCcw, Sparkles, Upload, UserRound } from "lucide-react";
 import { CameraView } from "@/components/scan/CameraView";
 import { FaceFrame } from "@/components/scan/FaceFrame";
 import { QualityTiles } from "@/components/scan/QualityTiles";
 import { AnalyzingOverlay } from "@/components/scan/AnalyzingOverlay";
 import { ApiStatus } from "@/components/scan/ApiStatus";
 import { PhotoAdjuster } from "@/components/scan/PhotoAdjuster";
-import { warmFaceDetector } from "@/lib/faceDetect";
+import { facePose, warmFaceDetector, type FacePose } from "@/lib/faceDetect";
 import { FACE_SHAPE_MAP } from "@/lib/skin";
 import { captureVideo, dataUrlToPrepared, prepareFile, type PreparedImage } from "@/lib/image";
 import { useSkinAnalysis } from "@/lib/useSkinAnalysis";
@@ -18,7 +18,7 @@ import { thumbnail } from "@/lib/thumbnail";
 import { useGlowStore } from "@/store/glowfit";
 import { PoweredBy } from "@/components/ui/PoweredBy";
 
-const SAMPLE_FACE = "/profile/avatar.jpg";
+const SAMPLE_FACE = "/profile/sample-face.jpg";
 
 async function toDataUrl(src: string) {
   const blob = await (await fetch(src)).blob();
@@ -47,10 +47,22 @@ export default function ScanPage() {
   const [adjust, setAdjust] = useState<{ src: string; source: "camera" | "upload" } | null>(null);
   const [original, setOriginal] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const { phase, error, run } = useSkinAnalysis();
+  const { phase, error, run, reset } = useSkinAnalysis();
   const busy = phase === "uploading" || phase === "analyzing";
+  // On-device head-pose check, so a turned or tilted face is flagged before YouCam rejects it.
+  const [pose, setPose] = useState<FacePose | null>(null);
 
   useEffect(() => warmFaceDetector(), []);
+
+  useEffect(() => {
+    setPose(null);
+    if (!image || useGlowStore.getState().sampleFace) return;
+    let live = true;
+    facePose(image.dataUrl).then((p) => live && setPose(p));
+    return () => {
+      live = false;
+    };
+  }, [image]);
 
   // Restore the last selfie so a page refresh doesn't lose it.
   // Read straight from the store: during hydration the hook still returns the initial empty state.
@@ -62,11 +74,12 @@ export default function ScanPage() {
   const accept = useCallback(
     (prepared: PreparedImage, source: "camera" | "upload") => {
       setLocalError(null);
+      reset();
       setImage(prepared);
       setSelfie({ dataUrl: prepared.dataUrl, width: prepared.width, height: prepared.height, source });
       setSkin(null);
     },
-    [setSelfie, setSkin],
+    [setSelfie, setSkin, reset],
   );
 
   const onFile = useCallback(
@@ -122,6 +135,7 @@ export default function ScanPage() {
   };
 
   const clear = () => {
+    reset();
     setAdjust(null);
     setOriginal(null);
     setImage(null);
@@ -131,6 +145,15 @@ export default function ScanPage() {
   };
 
   const shownError = localError || error;
+  const poseHint = pose?.turned
+    ? "Your face looks turned to the side."
+    : pose?.tilted
+      ? "Your head looks tilted."
+      : null;
+  const anotherPhoto = () => {
+    clear();
+    fileInput.current?.click();
+  };
   const selfieSource = () => useGlowStore.getState().selfie?.source ?? "upload";
 
   return (
@@ -268,8 +291,45 @@ export default function ScanPage() {
           />
         </section>
 
-        {/* Checklist + analyze */}
+        {/* Analyze first, so the button sits next to the photo; tips and privacy below */}
         <div className="flex flex-col gap-6">
+          <section className="card p-5 sm:p-6">
+            <p className="eyebrow mb-4">Photo Quality</p>
+            <QualityTiles quality={image?.quality ?? null} />
+            {shownError && (
+              <div className="mt-4 rounded-2xl bg-rose-50 p-4 text-sm text-rose-800" role="alert">
+                <p className="flex gap-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> {shownError}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button onClick={anotherPhoto} className="rounded-full bg-white px-4 py-2 text-wine-700 ring-1 ring-rose-200 transition hover:bg-rose-100">
+                    Choose another photo
+                  </button>
+                  <button onClick={trySample} className="rounded-full bg-white px-4 py-2 text-wine-700 ring-1 ring-rose-200 transition hover:bg-rose-100">
+                    Use the sample face
+                  </button>
+                </div>
+              </div>
+            )}
+            {poseHint && !shownError && !busy && (
+              <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
+                {poseHint} YouCam needs a straight-on photo with your head level, so this one may be rejected. For the
+                best result, use a photo where you look straight at the camera.
+              </p>
+            )}
+            {image && !image.quality.canAnalyze && !shownError && (
+              <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
+                This photo is too dark or too small for an accurate analysis. Try another one.
+              </p>
+            )}
+            <button className="btn-primary mt-5 w-full" onClick={analyze} disabled={!image || !image.quality.canAnalyze || busy || !!adjust}>
+              {busy ? "Analyzing…" : "Analyze My Skin"} <ArrowRight className="h-5 w-5" />
+            </button>
+            <button className="btn-outline mt-3 w-full" onClick={clear} disabled={!image || busy}>
+              <RotateCcw className="h-5 w-5" /> Use Another Photo
+            </button>
+          </section>
+
           <section className="card p-5 sm:p-6">
             <div className="mb-4 flex items-center justify-between gap-2">
               <h2 className="font-serif text-2xl text-wine-700">Before We Analyze</h2>
@@ -299,23 +359,6 @@ export default function ScanPage() {
                 never sold or shared.
               </p>
             </div>
-          </section>
-
-          <section className="card p-5 sm:p-6">
-            <p className="eyebrow mb-4">Photo Quality</p>
-            <QualityTiles quality={image?.quality ?? null} />
-            {shownError && <p className="mt-4 rounded-2xl bg-rose-50 p-3 text-sm text-rose-700">{shownError}</p>}
-            {image && !image.quality.canAnalyze && !shownError && (
-              <p className="mt-4 rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
-                This photo is too dark or too small for an accurate analysis. Try another one.
-              </p>
-            )}
-            <button className="btn-primary mt-5 w-full" onClick={analyze} disabled={!image || !image.quality.canAnalyze || busy || !!adjust}>
-              {busy ? "Analyzing…" : "Analyze My Skin"} <ArrowRight className="h-5 w-5" />
-            </button>
-            <button className="btn-outline mt-3 w-full" onClick={clear} disabled={!image || busy}>
-              <RotateCcw className="h-5 w-5" /> Use Another Photo
-            </button>
           </section>
         </div>
       </div>

@@ -19,7 +19,10 @@ const MAX_UNITS = () => num(process.env.GLOWFIT_MAX_UNITS, 12);
 const RESERVE = () => num(process.env.GLOWFIT_MIN_CREDITS, 100);
 const secret = () => process.env.GLOWFIT_QUOTA_SECRET || process.env.YOUCAM_API_KEY || "glowfit";
 
-type Used = { s: number; u: number };
+type Used = { s: number; u: number; r?: number };
+
+// A visitor gets back at most this many scans that YouCam rejected (bad angle, no face...).
+const MAX_REFUNDS = 3;
 
 const sign = (v: string) => createHmac("sha256", secret()).update(v).digest("base64url");
 
@@ -29,10 +32,10 @@ function readCookie(raw: string | undefined): Used {
   if (!body || !sig) return { s: 0, u: 0 };
   const a = Buffer.from(sign(body));
   const b = Buffer.from(sig);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) return { s: MAX_SCANS(), u: MAX_UNITS() }; // tampered: treat as used up
+  if (a.length !== b.length || !timingSafeEqual(a, b)) return { s: MAX_SCANS(), u: MAX_UNITS(), r: MAX_REFUNDS }; // tampered: treat as used up
   try {
     const v = JSON.parse(Buffer.from(body, "base64url").toString()) as Used;
-    return { s: Number(v.s) || 0, u: Number(v.u) || 0 };
+    return { s: Number(v.s) || 0, u: Number(v.u) || 0, r: Number(v.r) || 0 };
   } catch {
     return { s: 0, u: 0 };
   }
@@ -75,17 +78,39 @@ export async function takeQuota(kind: Spend, units: number): Promise<Limited> {
   const ip = ((await headers()).get("x-forwarded-for") ?? "local").split(",")[0].trim();
   const fromCookie = readCookie(jar.get(COOKIE)?.value);
   const fromIp = byIp.get(ip) ?? { s: 0, u: 0 };
-  const used = { s: Math.max(fromCookie.s, fromIp.s), u: Math.max(fromCookie.u, fromIp.u) };
+  const used = merge(fromCookie, fromIp);
 
   if (kind === "scan" ? used.s >= MAX_SCANS() : used.u + units > MAX_UNITS()) return "visitor";
   const left = await balance();
   if (left !== null && left - units < RESERVE()) return "reserve";
 
   const next = kind === "scan" ? { ...used, s: used.s + 1 } : { ...used, u: used.u + units };
+  save(jar, ip, next);
+  return null;
+}
+
+function merge(a: Used, b: Used): Used {
+  return { s: Math.max(a.s, b.s), u: Math.max(a.u, b.u), r: Math.max(a.r ?? 0, b.r ?? 0) };
+}
+
+function save(jar: Awaited<ReturnType<typeof cookies>>, ip: string, next: Used) {
   byIp.set(ip, next);
   const body = Buffer.from(JSON.stringify(next)).toString("base64url");
   jar.set(COOKIE, `${body}.${sign(body)}`, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", maxAge: 60 * 60 * 24 * 30, path: "/" });
-  return null;
+}
+
+/**
+ * Gives a scan back when YouCam rejected the photo (for example a turned face), so a visitor
+ * who retries with a better photo still gets a real result. Capped per visitor.
+ */
+export async function refundQuota(kind: Spend, units = 1) {
+  if (!on()) return;
+  const jar = await cookies();
+  const ip = ((await headers()).get("x-forwarded-for") ?? "local").split(",")[0].trim();
+  const used = merge(readCookie(jar.get(COOKIE)?.value), byIp.get(ip) ?? { s: 0, u: 0 });
+  if ((used.r ?? 0) >= MAX_REFUNDS) return;
+  const next = kind === "scan" ? { ...used, s: Math.max(0, used.s - 1) } : { ...used, u: Math.max(0, used.u - units) };
+  save(jar, ip, { ...next, r: (used.r ?? 0) + 1 });
 }
 
 /** What the visitor has left, for the notice in the app. */

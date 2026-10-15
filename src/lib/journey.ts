@@ -147,7 +147,7 @@ export function sampleJourney(): ScanEntry[] {
       id: `sample-${i}`,
       at,
       skin: { ...base, metrics, overall: Math.round(metrics.reduce((s, m) => s + m.score, 0) / metrics.length), analyzedAt: at },
-      photo: "/profile/avatar.jpg",
+      photo: "/profile/sample-face.jpg",
       note: notes[i],
     };
   });

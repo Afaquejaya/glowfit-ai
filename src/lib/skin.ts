@@ -87,6 +87,7 @@ export const YOUCAM_ERROR_HINTS: Record<string, string> = {
   error_src_face_out_of_bound: "Part of your face is outside the frame. Center your face and try again.",
   error_lighting_dark: "The lighting is too dark. Face a window or a soft light.",
   error_no_face: "We couldn't find a face. Use a clear, front-facing selfie.",
+  error_large_face_angle: "Your face is turned or tilted in this photo. Look straight at the camera with your head level, then try again.",
 };
 
 /** Problems any YouCam call can hit: account, network and service issues, in plain words. */
@@ -97,6 +98,13 @@ const COMMON_HINTS: [RegExp, string][] = [
   [/failed to fetch|network|load failed|econn|enotfound|fetch failed/i, "The connection dropped. Check your internet and try again."],
   [/http_5\d\d|502|503|504|internal|unavailable/i, "YouCam had a temporary problem. Please try again in a moment."],
   [/taking too long|timeout|timed out/i, "This is taking longer than usual. Please try again; your earlier results are kept."],
+  // Photo problems YouCam may report under other codes: say what to change, never "something went wrong".
+  [/face_angle|pose|tilt|yaw|pitch|roll/i, "Your face is turned or tilted in this photo. Look straight at the camera with your head level, then try again."],
+  [/multi.*face|more_than_one|too_many_face|faces/i, "There is more than one face in this photo. Use a photo of just you."],
+  [/blur|sharp|focus/i, "The photo is blurry. Hold still, or choose a sharper photo."],
+  [/format|decode|unsupported|corrupt|invalid_image|download_failed|upload_failed/i, "This photo couldn't be read. Try a JPG or PNG photo."],
+  [/bright|exposure|light/i, "The lighting isn't even. Face a window or a soft light and try again."],
+  [/face|landmark|occlu/i, "YouCam couldn't read your face clearly. Use a front-facing, well-lit selfie with your whole face in the frame."],
 ];
 
 /** Turns a YouCam error code or message into a sentence the user can act on. */
@@ -114,6 +122,8 @@ export function networkSafe(e: unknown) {
   return e instanceof TypeError && /fetch|network|load failed/i.test(m) ? "The connection dropped. Check your internet and try again." : m;
 }
 
-export function friendlyError(code?: string, fallback = "Something went wrong while analyzing your skin. Please try again.") {
+export const SCAN_FALLBACK = "YouCam couldn't analyze this photo. Try a clear, front-facing selfie in soft light, or use the sample face.";
+
+export function friendlyError(code?: string, fallback = SCAN_FALLBACK) {
   return friendlyYouCam(code, fallback);
 }

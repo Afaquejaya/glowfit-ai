@@ -88,7 +88,7 @@ export default function SkinIntelligencePage() {
       )}
 
       <div className="mt-6">
-        <SkinReport skin={skin} photo={selfie?.dataUrl ?? "/profile/avatar.jpg"} sample={!selfie} />
+        <SkinReport skin={skin} photo={selfie?.dataUrl ?? "/profile/sample-face.jpg"} sample={!selfie} />
       </div>
 
       <DecisionLabCta photo={selfie?.dataUrl} />

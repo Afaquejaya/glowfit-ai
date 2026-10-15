@@ -126,7 +126,7 @@ function ProfilePage() {
       <section className="card mt-8 grid gap-6 p-5 sm:p-6 md:grid-cols-[280px_1fr]">
         <div className="relative aspect-[287/249] overflow-hidden rounded-2xl bg-blush-100">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={selfie?.dataUrl ?? "/profile/avatar.jpg"} alt={displayName} className="h-full w-full object-cover" />
+          <img src={selfie?.dataUrl ?? "/profile/sample-face.jpg"} alt={displayName} className="h-full w-full object-cover" />
           {!selfie && (
             <span className="absolute left-3 top-3 rounded-full bg-white/85 px-2.5 py-1 text-[10px] uppercase tracking-wide text-charcoal/60">
               Sample photo
@@ -269,7 +269,7 @@ function ProfilePage() {
         <h2 className="font-serif text-4xl tracking-tight sm:text-5xl">Meet Your Skin, In Detail.</h2>
         <p className="mb-5 mt-2 text-charcoal/65">AI-powered skin analysis that turns one selfie into a personalized skin profile.</p>
         {skin ? (
-          <SkinReport skin={skin} photo={selfie?.dataUrl ?? "/profile/avatar.jpg"} sample={!selfie} />
+          <SkinReport skin={skin} photo={selfie?.dataUrl ?? "/profile/sample-face.jpg"} sample={!selfie} />
         ) : (
           <div className="card p-6 text-center">
             <p className="font-serif text-2xl">No skin scan yet</p>
@@ -449,7 +449,7 @@ function SavedPersonProfile({ lookId }: { lookId: string }) {
   // Looks saved before profiles were attached fall back to the latest scan on this device.
   const person = saved.person;
   const skin = person?.skin ?? currentSkin;
-  const photo = person?.photo ?? selfie?.dataUrl ?? "/profile/avatar.jpg";
+  const photo = person?.photo ?? selfie?.dataUrl ?? "/profile/sample-face.jpg";
   const name = person?.name || "Unnamed profile";
   const theirLooks = person ? savedLooks.filter((l) => l.person?.id === person.id) : [saved];
   const others = [...new Map(savedLooks.filter((l) => l.person && l.person.id !== person?.id).map((l) => [l.person!.id, l])).values()];

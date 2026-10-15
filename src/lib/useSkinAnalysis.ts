@@ -77,5 +77,11 @@ export function useSkinAnalysis() {
     setPhase("idle");
   }, []);
 
-  return { phase, error, run, cancel };
+  /** Clears a previous error, for example when a new photo is chosen. */
+  const reset = useCallback(() => {
+    setError(null);
+    setPhase("idle");
+  }, []);
+
+  return { phase, error, run, cancel, reset };
 }

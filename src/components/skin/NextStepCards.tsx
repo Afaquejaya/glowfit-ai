@@ -24,7 +24,7 @@ export function DecisionLabCta({ photo }: { photo?: string | null }) {
   const steps: { title: string; line: string; imgs: string[] }[] = [
     { title: "Your moment", line: "Occasion, time, style, budget", imgs: [`/demo/moments/${lab.moment.occasion}.jpg`] },
     { title: "Get 3 looks", line: "Ranked for your skin", imgs: ["/demo/looks/natural-glow.jpg", "/demo/looks/soft-glam.jpg", "/demo/looks/modern-bold.jpg"] },
-    { title: "Try on", line: "Rendered on your face", imgs: [photo ?? "/profile/avatar.jpg"] },
+    { title: "Try on", line: "Rendered on your face", imgs: [photo ?? "/profile/sample-face.jpg"] },
     { title: "Fine-tune", line: "Lips, eyes, blush, hair", imgs: ["/demo/looks/change.jpg"] },
     { title: "Decide & shop", line: "Final look and products", imgs: ["/demo/looks/final.jpg"] },
   ];

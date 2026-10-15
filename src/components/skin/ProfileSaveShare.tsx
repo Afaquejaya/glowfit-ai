@@ -25,7 +25,7 @@ export function ProfileSaveShare() {
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  const photoSrc = selfie?.dataUrl ?? (skin ? "/profile/avatar.jpg" : null);
+  const photoSrc = selfie?.dataUrl ?? (skin ? "/profile/sample-face.jpg" : null);
   const currentId = skin && photoSrc ? `prof-${hash(`${photoSrc.length}:${photoSrc.slice(-200)}:${skin.analyzedAt}`)}` : null;
   const current = saved.find((p) => p.id === currentId);
   const dirty = !!current && current.name !== name.trim();

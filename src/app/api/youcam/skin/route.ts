@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createTask, FACE_FEATURES, faceShapeEnabled, isDemoMode, skinActions, uploadFile, YouCamError } from "@/lib/youcam";
 import { pickMode, SD_MIN_SHORT_SIDE } from "@/lib/skin";
-import { takeQuota } from "@/lib/quota";
+import { refundQuota, takeQuota } from "@/lib/quota";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -48,6 +48,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ taskId, mode, faceTaskId: await faceTask });
   } catch (e) {
     const err = e as YouCamError;
+    // The scan never started, so it shouldn't count against the visitor's real scans.
+    await refundQuota("scan");
     return NextResponse.json({ error: err.code || err.message }, { status: err.status && err.status < 500 ? err.status : 502 });
   }
 }
