@@ -6,12 +6,16 @@ GlowFit AI is a beauty decision engine built on the **YouCam API**. One selfie g
 
 **Tracks:** Skin AI + eCommerce VTO
 
+[![Watch the GlowFit AI demo on YouTube](docs/media/demo-video.jpg)](https://youtu.be/EdBg7vJooeQ)
+
+**[Watch the 2:44 demo on YouTube](https://youtu.be/EdBg7vJooeQ)** · **[Open the live app](https://glowfit-ai.vercel.app)**
+
 ## Try it
 
 | | |
 |---|---|
-| Live demo | _add your Vercel link here_ |
-| Demo video | _add your YouTube link here_ |
+| Live demo | https://glowfit-ai.vercel.app |
+| Demo video | https://youtu.be/EdBg7vJooeQ (2:44, recorded on the live app with real YouCam results) |
 | No selfie? | On **Skin Scan**, click **Try with a sample face**. The whole app works and uses no API units. |
 
 ## What it does
@@ -29,11 +33,65 @@ GlowFit AI is a beauty decision engine built on the **YouCam API**. One selfie g
 
 ### The Decision Lab
 
-1. **Moment:** occasion, time of day, style and budget.
-2. **Three Looks:** Natural Glow, Soft Glam and Modern Bold rendered on your face, each with a **match score** built from your skin metrics, the occasion and your style.
-3. **Budget Mode:** the same shades from lower-priced products, showing the saving and what changed.
-4. **Change One Thing:** swap lip, blush, eyes, brows, finish, coverage or hairstyle. The impact on harmony, occasion fit, contrast and cost is scored **before** you spend a render.
-5. **Decision:** the final look with a before/after slider, confidence checks, a product list and total, a save option, and a shareable **Look Card** (PNG).
+The Decision Lab turns a skin profile into one confident purchase in five steps. Every screenshot below comes from the live app, using one real scan and real YouCam renders.
+
+**Before the lab: Skin Intelligence.** One selfie goes to YouCam Skin Analysis and the AI Face Analyzer, side by side. The result is a skin score, a skin type, 8 metrics mapped on the face, face shape and ratios, and a care plan. Every score in the lab is computed from this profile.
+
+![Skin Intelligence: skin score 91, 8 metrics and GlowMap](docs/media/skin-intelligence.jpg)
+
+#### 1. Moment: tell GlowFit where you're going
+
+Pick the occasion (Wedding, Date Night, Work, Party and more), the time of day, the style and a budget. No API call is made here. These choices become part of every match score.
+
+![Step 1, Moment: wedding, evening, elegant, ₹3,000 budget](docs/media/lab-1-moment.jpg)
+
+#### 2. Three Looks: see them on your own face
+
+**Generate My 3 Looks** sends 3 recipes to **YouCam Makeup VTO**: Natural Glow, Soft Glam and Modern Bold. The selfie is uploaded once and its `file_id` is reused. Each look gets:
+- a **match score** (occasion fit, skin compatibility, style match);
+- an estimated cost;
+- a plain-language **"Why this look?"**.
+
+The best match is marked **AI Recommended**.
+
+![Step 2, Three Looks: rendered on the user's selfie with match scores](docs/media/lab-2-three-looks.jpg)
+
+#### 3. Budget Mode: keep the look, reduce the cost
+
+GlowFit keeps the shades that define the look and swaps the rest for lower-priced products. It shows the saving, what changed and what stayed. No new render is needed.
+
+![Step 3, Budget Mode: save ₹1,000, ₹3,794 to ₹2,794](docs/media/lab-3-budget.jpg)
+
+#### 4. Change One Thing: test a single change
+
+Swap one element at a time: lip, blush, eyes, brows, finish, coverage or **hairstyle**.
+- The impact on harmony, occasion fit, contrast and cost is scored for free **before** you render.
+- **Preview** runs one real YouCam render on top of the current look.
+- A before/after slider shows exactly what changed.
+- Hairstyles come from **YouCam AI Hairstyle**, ranked for the occasion and style.
+
+| Makeup change (Berry lip, Makeup VTO) | Hairstyle change (Classic Hollywood Waves, AI Hairstyle) |
+|---|---|
+| ![Step 4, Change One Thing: berry lip with before/after slider](docs/media/lab-4-change-lip.jpg) | ![Step 4, Change One Thing: hairstyle with before/after slider](docs/media/lab-4-change-hair.jpg) |
+
+#### 5. Decision: this is your look
+
+The final screen brings together:
+- the finished look, with every fine-tune step as a thumbnail and a before/after toggle;
+- a **confidence score** with its checks (skin, occasion, style, virtual try-on verified);
+- the exact products and the budget-optimized total.
+
+From here you can view the products, save the look, change something, or share a **Look Card** (PNG).
+
+![Step 5, Decision: final look, confidence 75, products and total](docs/media/lab-5-decision.jpg)
+
+| Step | YouCam calls | Units |
+|---|---|---|
+| Moment | none | 0 |
+| Three Looks | 3 × Makeup VTO | 3 |
+| Budget Mode | none | 0 |
+| Change One Thing | 1 × Makeup VTO per preview, or 1 × AI Hairstyle | 1, or 2 for hair |
+| Decision | none | 0 |
 
 ### What makes it different
 
